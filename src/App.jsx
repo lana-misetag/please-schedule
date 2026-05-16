@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect } from "react";
 import { supabase } from "./supabase";
+import html2pdf from "html2pdf.js";
 import {
   ThemeProvider, createTheme, CssBaseline,
   AppBar, Toolbar, Typography, IconButton, Tooltip, Chip, Box,
@@ -10,10 +11,8 @@ import {
 } from "@mui/material";
 import {
   LightMode, DarkMode, Logout, ChevronLeft, ChevronRight,
-  AccessTime, Delete, History, CalendarMonth, PersonAdd, People,
+  AccessTime, Delete, History, CalendarMonth, PersonAdd, People, PictureAsPdf,
 } from "@mui/icons-material";
-
-// ─── CONSTANTS ───────────────────────────────────────────────────────────────
 
 const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
@@ -28,13 +27,13 @@ const SHIFT_PRESETS = [
 const ROLE_META = {
   admin:      { label: "Manager",   color: "#F5A623" },
   cook_admin: { label: "Cook",      color: "#F5A623" },
+  chef:       { label: "Chef",      color: "#FF9F43" },
   bartender:  { label: "Bartender", color: "#4ECDC4" },
   cook:       { label: "Cook",      color: "#FF6B6B" },
-  chef:       { label: "Chef",      color: "#FF9F43" },
   staff:      { label: "Staff",     color: "#C3A6FF" },
 };
 
-// ─── UTILS ───────────────────────────────────────────────────────────────────
+const ROLE_ORDER = { admin: 0, cook_admin: 0, chef: 1, bartender: 2, cook: 3, staff: 4 };
 
 function getMondayOfWeek(dateStr) {
   const d = new Date(dateStr);
@@ -78,8 +77,6 @@ function initials(name) {
   return name.split(" ").map(w => w[0]).join("").toUpperCase().slice(0, 2);
 }
 
-// ─── THEME ───────────────────────────────────────────────────────────────────
-
 function buildTheme(mode) {
   return createTheme({
     palette: {
@@ -121,8 +118,6 @@ function buildTheme(mode) {
   });
 }
 
-// ─── TIME INPUT ───────────────────────────────────────────────────────────────
-
 function TimeInput({ label, value, onChange, mode }) {
   return (
     <Box sx={{ flex: 1 }}>
@@ -136,8 +131,6 @@ function TimeInput({ label, value, onChange, mode }) {
     </Box>
   );
 }
-
-// ─── LOGIN ───────────────────────────────────────────────────────────────────
 
 function LoginScreen({ onLogin, mode, setMode }) {
   const [isRegister, setIsRegister] = useState(false);
@@ -197,8 +190,6 @@ function LoginScreen({ onLogin, mode, setMode }) {
   );
 }
 
-// ─── SHIFT MODAL ─────────────────────────────────────────────────────────────
-
 function ShiftModal({ open, staffName, existing, onSave, onClose, mode }) {
   const [start, setStart] = useState(existing?.shift_start?.slice(0, 5) || "");
   const [end, setEnd]     = useState(existing?.shift_end?.slice(0, 5)   || "");
@@ -255,8 +246,6 @@ function ShiftModal({ open, staffName, existing, onSave, onClose, mode }) {
   );
 }
 
-// ─── ADD STAFF MODAL ──────────────────────────────────────────────────────────
-
 function AddStaffModal({ open, onClose, onAdd }) {
   const [name, setName] = useState("");
   const [role, setRole] = useState("staff");
@@ -294,8 +283,6 @@ function AddStaffModal({ open, onClose, onAdd }) {
     </Dialog>
   );
 }
-
-// ─── MAIN APP ────────────────────────────────────────────────────────────────
 
 export default function App() {
   const [user, setUser] = useState(null);
@@ -337,12 +324,10 @@ export default function App() {
 
   async function loadStaff() {
     const { data } = await supabase.from("staff").select("*");
-const ROLE_ORDER = { admin: 0, cook_admin: 0, chef: 1, bartender: 2, cook: 3, staff: 4};
-const sorted = (data || []).sort((a, b) => (ROLE_ORDER[a.role] ?? 5) - (ROLE_ORDER[b.role] ?? 5));
-setStaff(sorted);
-    // Check if current user is admin
+    const sorted = (data || []).sort((a, b) => (ROLE_ORDER[a.role] ?? 5) - (ROLE_ORDER[b.role] ?? 5));
+    setStaff(sorted);
     const userName = user?.user_metadata?.name || user?.email?.split("@")[0] || "";
-    const me = (data || []).find(s => s.name.toLowerCase() === userName.toLowerCase());
+    const me = sorted.find(s => s.name.toLowerCase() === userName.toLowerCase());
     setIsAdmin(me?.role === "admin" || me?.role === "cook_admin");
   }
 
@@ -397,6 +382,51 @@ setStaff(sorted);
     setMonday(d.toISOString().split("T")[0]);
   }
 
+  function exportPDF() {
+  const weekLabel = `${fmtDate(weekDates[0])} – ${fmtDate(weekDates[6])}`;
+  
+  const rows = staff.map(s => {
+    const shifts = DAYS.map((_, di) => {
+      const sh = getShift(s.id, di);
+      return sh ? `${fmtTime(sh.shift_start)}–${fmtTime(sh.shift_end)}` : "";
+    });
+    const hrs = getWeekHours(s.id);
+    return `<tr>
+      <td>${s.name}<br><small>${ROLE_META[s.role]?.label || s.role}</small></td>
+      ${shifts.map(sh => `<td>${sh}</td>`).join("")}
+      <td><b>${hrs > 0 ? hrs + "h" : "—"}</b></td>
+    </tr>`;
+  }).join("");
+
+  const html = `<html><head><style>
+    body { font-family: Arial, sans-serif; padding: 20px; }
+    h2 { margin-bottom: 4px; }
+    p { color: #666; margin-bottom: 16px; font-size: 13px; }
+    table { width: 100%; border-collapse: collapse; font-size: 11px; }
+    th { background: #f0f0f0; padding: 8px; border: 1px solid #ccc; font-weight: bold; }
+    td { padding: 7px 8px; border: 1px solid #ccc; text-align: center; }
+    td:first-child { text-align: left; font-weight: 600; }
+    small { color: #888; font-weight: 400; }
+    tr:nth-child(even) { background: #fafafa; }
+  </style></head><body>
+    <h2>Please! Beverage Co. — Staff Schedule</h2>
+    <p>Week: ${weekLabel}</p>
+    <table>
+      <tr>
+        <th>Name</th>
+        ${DAYS.map((d, i) => `<th>${d}<br><small>${fmtDate(weekDates[i])}</small></th>`).join("")}
+        <th>Hrs</th>
+      </tr>
+      ${rows}
+    </table>
+  </body></html>`;
+
+  const win = window.open("", "_blank");
+  win.document.write(html);
+  win.document.close();
+  win.print();
+}
+
   if (loading) {
     return (
       <Box sx={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", bgcolor: "#0a0e10" }}>
@@ -429,8 +459,7 @@ setStaff(sorted);
           </Tooltip>
           <Chip
             avatar={<Avatar sx={{ bgcolor: "#F5A62330 !important", color: "#F5A623 !important", fontSize: "11px !important", fontWeight: 700 }}>{initials(userName)}</Avatar>}
-            label={userName}
-            variant="outlined" size="small"
+            label={userName} variant="outlined" size="small"
             sx={{ borderColor: "#F5A62360", color: "#F5A623" }}
           />
           <Tooltip title="Sign out">
@@ -466,7 +495,7 @@ setStaff(sorted);
         </Box>
       )}
 
-      {/* STAFF MANAGEMENT */}
+      {/* STAFF */}
       {tab === 2 && isAdmin && (
         <Box sx={{ p: 3, maxWidth: 900, mx: "auto" }}>
           <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
@@ -476,7 +505,7 @@ setStaff(sorted);
             </Button>
           </Stack>
           <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", sm: "repeat(2, 1fr)", md: "repeat(3, 1fr)" }, gap: 1.5 }}>
-           {staff.map(s => (
+            {staff.map(s => (
               <Paper key={s.id} variant="outlined" sx={{ p: 1.5, display: "flex", alignItems: "center", gap: 1.5 }}>
                 <Avatar sx={{ width: 36, height: 36, fontSize: 13, fontWeight: 700, bgcolor: (ROLE_META[s.role]?.color || "#F5A623") + "25", color: ROLE_META[s.role]?.color || "#F5A623" }}>
                   {initials(s.name)}
@@ -487,7 +516,7 @@ setStaff(sorted);
                 </Box>
                 <Chip label={ROLE_META[s.role]?.label || s.role} size="small"
                   sx={{ bgcolor: (ROLE_META[s.role]?.color || "#F5A623") + "20", color: ROLE_META[s.role]?.color || "#F5A623", border: `1px solid ${ROLE_META[s.role]?.color || "#F5A623"}40` }} />
-                {s.role !== "admin" && (
+                {s.role !== "admin" && s.role !== "cook_admin" && (
                   <IconButton size="small" color="error" onClick={() => removeStaff(s.id)}>
                     <Delete fontSize="small" />
                   </IconButton>
@@ -510,7 +539,14 @@ setStaff(sorted);
           </Box>
 
           <Box sx={{ overflowX: "auto", px: 2, pb: 6 }}>
-            <TableContainer component={Paper} variant="outlined" sx={{ borderRadius: 2 }}>
+            <TableContainer id="schedule-table" component={Paper} variant="outlined" sx={{ borderRadius: 2 }}>
+              {/* PDF header - only visible in PDF */}
+              <Box sx={{ display: "none" }} className="pdf-header">
+                <Typography variant="h5" fontWeight={700} sx={{ p: 2, pb: 0 }}>Please! Beverage Co. — Staff Schedule</Typography>
+                <Typography variant="body2" sx={{ px: 2, pb: 1, color: "#666" }}>
+                  Week: {fmtDate(weekDates[0])} – {fmtDate(weekDates[6])}
+                </Typography>
+              </Box>
               <Table size="small" stickyHeader>
                 <TableHead>
                   <TableRow>
@@ -535,7 +571,10 @@ setStaff(sorted);
                             <Avatar sx={{ width: 28, height: 28, fontSize: 11, fontWeight: 700, bgcolor: color + "25", color }}>
                               {initials(s.name)}
                             </Avatar>
-                            <Typography variant="body2" fontWeight={600}>{s.name}</Typography>
+                            <Box>
+                              <Typography variant="body2" fontWeight={600}>{s.name}</Typography>
+                              <Typography variant="caption" color="text.secondary" sx={{ fontSize: 10 }}>{ROLE_META[s.role]?.label}</Typography>
+                            </Box>
                           </Stack>
                         </TableCell>
                         {DAYS.map((_, di) => {
@@ -565,10 +604,16 @@ setStaff(sorted);
                 </TableBody>
               </Table>
             </TableContainer>
+
             {isAdmin && (
-              <Typography variant="caption" color="text.disabled" sx={{ display: "block", textAlign: "center", mt: 2 }}>
-                Tap any cell to assign or edit a shift
-              </Typography>
+              <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mt: 2 }}>
+                <Typography variant="caption" color="text.disabled">
+                  Tap any cell to assign or edit a shift
+                </Typography>
+                <Button variant="contained" size="small" startIcon={<PictureAsPdf />} onClick={exportPDF}>
+                  Export PDF
+                </Button>
+              </Stack>
             )}
           </Box>
         </>
