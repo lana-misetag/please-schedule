@@ -6,11 +6,11 @@ import {
   Tabs, Tab, Button, Dialog, DialogTitle, DialogContent, DialogActions,
   Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
   Paper, Stack, Avatar, Alert, TextField, CircularProgress, Card,
-  CardActionArea,
+  CardActionArea, MenuItem, Select, FormControl, InputLabel,
 } from "@mui/material";
 import {
   LightMode, DarkMode, Logout, ChevronLeft, ChevronRight,
-  AccessTime, Delete, History, CalendarMonth,
+  AccessTime, Delete, History, CalendarMonth, PersonAdd, People,
 } from "@mui/icons-material";
 
 // ─── CONSTANTS ───────────────────────────────────────────────────────────────
@@ -24,6 +24,14 @@ const SHIFT_PRESETS = [
   { label: "4:30–11:30", start: "16:30", end: "23:30" },
   { label: "10–4",       start: "10:00", end: "16:00" },
 ];
+
+const ROLE_META = {
+  admin:     { label: "Manager",   color: "#F5A623" },
+  bartender: { label: "Bartender", color: "#4ECDC4" },
+  cook:      { label: "Cook",      color: "#FF6B6B" },
+  chef:      { label: "Chef",      color: "#FF9F43" },
+  staff:     { label: "Staff",     color: "#C3A6FF" },
+};
 
 // ─── UTILS ───────────────────────────────────────────────────────────────────
 
@@ -128,7 +136,7 @@ function TimeInput({ label, value, onChange, mode }) {
   );
 }
 
-// ─── LOGIN SCREEN ─────────────────────────────────────────────────────────────
+// ─── LOGIN ───────────────────────────────────────────────────────────────────
 
 function LoginScreen({ onLogin, mode, setMode }) {
   const [isRegister, setIsRegister] = useState(false);
@@ -144,10 +152,7 @@ function LoginScreen({ onLogin, mode, setMode }) {
     setError(""); setMessage(""); setLoading(true);
     try {
       if (isRegister) {
-        const { error } = await supabase.auth.signUp({
-          email, password,
-          options: { data: { name } }
-        });
+        const { error } = await supabase.auth.signUp({ email, password, options: { data: { name } } });
         if (error) throw error;
         setMessage("Check your email to confirm registration!");
       } else {
@@ -155,9 +160,7 @@ function LoginScreen({ onLogin, mode, setMode }) {
         if (error) throw error;
         onLogin(data.user);
       }
-    } catch (e) {
-      setError(e.message);
-    }
+    } catch (e) { setError(e.message); }
     setLoading(false);
   }
 
@@ -170,41 +173,20 @@ function LoginScreen({ onLogin, mode, setMode }) {
             {mode === "dark" ? <LightMode /> : <DarkMode />}
           </IconButton>
         </Box>
-
-        <Typography variant="overline" color="primary" sx={{ letterSpacing: "0.2em", mb: 0.5 }}>
-          Please! Beverage Co.
-        </Typography>
-        <Typography variant="h4" sx={{ fontWeight: 800, mb: 4, letterSpacing: "-0.5px" }}>
-          Staff Schedule
-        </Typography>
-
+        <Typography variant="overline" color="primary" sx={{ letterSpacing: "0.2em", mb: 0.5 }}>Please! Beverage Co.</Typography>
+        <Typography variant="h4" sx={{ fontWeight: 800, mb: 4, letterSpacing: "-0.5px" }}>Staff Schedule</Typography>
         <Box sx={{ width: "100%", maxWidth: 360 }}>
           <Paper variant="outlined" sx={{ p: 3, borderRadius: 3 }}>
-            <Typography variant="h6" fontWeight={700} sx={{ mb: 2.5 }}>
-              {isRegister ? "Create account" : "Sign in"}
-            </Typography>
-
-            {isRegister && (
-              <TextField label="Your name" fullWidth size="small" value={name}
-                onChange={e => setName(e.target.value)} sx={{ mb: 2 }} />
-            )}
-
-            <TextField label="Email" type="email" fullWidth size="small" value={email}
-              onChange={e => setEmail(e.target.value)} sx={{ mb: 2 }} />
-
-            <TextField label="Password" type="password" fullWidth size="small" value={password}
-              onChange={e => setPassword(e.target.value)} sx={{ mb: 2.5 }}
-              onKeyDown={e => e.key === "Enter" && handleSubmit()} />
-
+            <Typography variant="h6" fontWeight={700} sx={{ mb: 2.5 }}>{isRegister ? "Create account" : "Sign in"}</Typography>
+            {isRegister && <TextField label="Your name" fullWidth size="small" value={name} onChange={e => setName(e.target.value)} sx={{ mb: 2 }} />}
+            <TextField label="Email" type="email" fullWidth size="small" value={email} onChange={e => setEmail(e.target.value)} sx={{ mb: 2 }} />
+            <TextField label="Password" type="password" fullWidth size="small" value={password} onChange={e => setPassword(e.target.value)} sx={{ mb: 2.5 }} onKeyDown={e => e.key === "Enter" && handleSubmit()} />
             {error && <Alert severity="error" sx={{ mb: 2, py: 0 }}>{error}</Alert>}
             {message && <Alert severity="success" sx={{ mb: 2, py: 0 }}>{message}</Alert>}
-
             <Button fullWidth variant="contained" size="large" onClick={handleSubmit} disabled={loading}>
               {loading ? <CircularProgress size={20} color="inherit" /> : isRegister ? "Create account" : "Sign in"}
             </Button>
-
-            <Button fullWidth size="small" color="inherit" sx={{ mt: 1.5 }}
-              onClick={() => { setIsRegister(!isRegister); setError(""); setMessage(""); }}>
+            <Button fullWidth size="small" color="inherit" sx={{ mt: 1.5 }} onClick={() => { setIsRegister(!isRegister); setError(""); setMessage(""); }}>
               {isRegister ? "Already have an account? Sign in" : "No account? Register"}
             </Button>
           </Paper>
@@ -216,7 +198,7 @@ function LoginScreen({ onLogin, mode, setMode }) {
 
 // ─── SHIFT MODAL ─────────────────────────────────────────────────────────────
 
-function ShiftModal({ open, userName, existing, onSave, onClose, mode }) {
+function ShiftModal({ open, staffName, existing, onSave, onClose, mode }) {
   const [start, setStart] = useState(existing?.shift_start?.slice(0, 5) || "");
   const [end, setEnd]     = useState(existing?.shift_end?.slice(0, 5)   || "");
   const [note, setNote]   = useState(existing?.note || "");
@@ -228,12 +210,11 @@ function ShiftModal({ open, userName, existing, onSave, onClose, mode }) {
       <DialogTitle sx={{ pb: 1 }}>
         <Stack direction="row" alignItems="center" spacing={1.5}>
           <Avatar sx={{ bgcolor: "#F5A62325", color: "#F5A623", width: 36, height: 36, fontSize: 13, fontWeight: 700 }}>
-            {initials(userName)}
+            {initials(staffName)}
           </Avatar>
-          <Typography variant="subtitle1" fontWeight={700}>{userName}</Typography>
+          <Typography variant="subtitle1" fontWeight={700}>{staffName}</Typography>
         </Stack>
       </DialogTitle>
-
       <DialogContent>
         <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 1, letterSpacing: "0.08em" }}>QUICK PRESETS</Typography>
         <Stack direction="row" flexWrap="wrap" gap={1} sx={{ mb: 3 }}>
@@ -244,38 +225,70 @@ function ShiftModal({ open, userName, existing, onSave, onClose, mode }) {
               onClick={() => { setPreset(p.label); setStart(p.start); setEnd(p.end); }} />
           ))}
         </Stack>
-
         <Stack direction="row" spacing={2} sx={{ mb: 2 }}>
           <TimeInput label="Start" value={start} onChange={v => { setStart(v); setPreset(""); }} mode={mode} />
           <TimeInput label="End"   value={end}   onChange={v => { setEnd(v);   setPreset(""); }} mode={mode} />
         </Stack>
-
         {hours > 0 && (
           <Stack direction="row" alignItems="center" spacing={0.5} sx={{ mb: 2 }}>
             <AccessTime sx={{ fontSize: 16, color: "secondary.main" }} />
             <Typography variant="body2" color="secondary.main" fontWeight={600}>{hours} hours</Typography>
           </Stack>
         )}
-
         <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 0.5, fontWeight: 600, fontSize: 11 }}>NOTE (OPTIONAL)</Typography>
         <Box sx={{ border: "1px solid", borderColor: mode === "dark" ? "#2a3a45" : "#d5c8b5", borderRadius: 2 }}>
           <input value={note} onChange={e => setNote(e.target.value)} placeholder="e.g. training shift"
             style={{ width: "100%", padding: "10px 12px", border: "none", outline: "none", background: "transparent", color: mode === "dark" ? "#e0eef0" : "#2a2218", fontSize: 14, fontFamily: "inherit", boxSizing: "border-box" }} />
         </Box>
       </DialogContent>
-
       <DialogActions sx={{ px: 3, pb: 2.5, flexDirection: "column", gap: 1 }}>
         {existing && (
-          <Button fullWidth variant="outlined" color="error" startIcon={<Delete />} onClick={() => onSave(null)}>
-            Remove shift
-          </Button>
+          <Button fullWidth variant="outlined" color="error" startIcon={<Delete />} onClick={() => onSave(null)}>Remove shift</Button>
         )}
         <Stack direction="row" spacing={1} sx={{ width: "100%" }}>
           <Button fullWidth variant="outlined" color="inherit" onClick={onClose}>Cancel</Button>
-          <Button fullWidth variant="contained" disabled={!start || !end} onClick={() => onSave({ start, end, note })}>
-            Save shift
-          </Button>
+          <Button fullWidth variant="contained" disabled={!start || !end} onClick={() => onSave({ start, end, note })}>Save shift</Button>
         </Stack>
+      </DialogActions>
+    </Dialog>
+  );
+}
+
+// ─── ADD STAFF MODAL ──────────────────────────────────────────────────────────
+
+function AddStaffModal({ open, onClose, onAdd }) {
+  const [name, setName] = useState("");
+  const [role, setRole] = useState("staff");
+  const [loading, setLoading] = useState(false);
+
+  async function handleAdd() {
+    if (!name.trim()) return;
+    setLoading(true);
+    await onAdd({ name: name.trim(), role });
+    setName(""); setRole("staff");
+    setLoading(false);
+    onClose();
+  }
+
+  return (
+    <Dialog open={open} onClose={onClose} maxWidth="xs" fullWidth>
+      <DialogTitle fontWeight={700}>Add Staff Member</DialogTitle>
+      <DialogContent>
+        <TextField label="Name" fullWidth size="small" value={name} onChange={e => setName(e.target.value)} sx={{ mb: 2, mt: 1 }} />
+        <FormControl fullWidth size="small">
+          <InputLabel>Role</InputLabel>
+          <Select value={role} label="Role" onChange={e => setRole(e.target.value)}>
+            {Object.entries(ROLE_META).map(([k, v]) => (
+              <MenuItem key={k} value={k}>{v.label}</MenuItem>
+            ))}
+          </Select>
+        </FormControl>
+      </DialogContent>
+      <DialogActions sx={{ px: 3, pb: 2.5 }}>
+        <Button variant="outlined" color="inherit" onClick={onClose}>Cancel</Button>
+        <Button variant="contained" onClick={handleAdd} disabled={loading || !name.trim()}>
+          {loading ? <CircularProgress size={18} color="inherit" /> : "Add"}
+        </Button>
       </DialogActions>
     </Dialog>
   );
@@ -289,15 +302,16 @@ export default function App() {
   const [monday, setMonday] = useState(getMondayOfWeek(new Date().toISOString().split("T")[0]));
   const [tab, setTab] = useState(0);
   const [modal, setModal] = useState(null);
+  const [addStaffOpen, setAddStaffOpen] = useState(false);
   const [mode, setMode] = useState("dark");
+  const [staff, setStaff] = useState([]);
   const [schedules, setSchedules] = useState([]);
   const [allWeeks, setAllWeeks] = useState([]);
-  const [saving, setSaving] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
 
   const theme = useMemo(() => buildTheme(mode), [mode]);
   const weekDates = useMemo(() => getWeekDates(monday), [monday]);
 
-  // Check auth on load
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setUser(session?.user ?? null);
@@ -309,76 +323,77 @@ export default function App() {
     return () => subscription.unsubscribe();
   }, []);
 
-  // Load schedule for current week
+  useEffect(() => {
+    if (!user) return;
+    loadStaff();
+    loadAllWeeks();
+  }, [user]);
+
   useEffect(() => {
     if (!user) return;
     loadWeekSchedule();
   }, [user, monday]);
 
-  // Load all weeks for history
-  useEffect(() => {
-    if (!user) return;
-    loadAllWeeks();
-  }, [user]);
+  async function loadStaff() {
+    const { data } = await supabase.from("staff").select("*");
+const ROLE_ORDER = { admin: 0, chef: 1, bartender: 2, cook: 3, staff: 4 };
+const sorted = (data || []).sort((a, b) => (ROLE_ORDER[a.role] ?? 5) - (ROLE_ORDER[b.role] ?? 5));
+setStaff(sorted);
+    // Check if current user is admin
+    const userName = user?.user_metadata?.name || user?.email?.split("@")[0] || "";
+    const me = (data || []).find(s => s.name.toLowerCase() === userName.toLowerCase());
+    setIsAdmin(me?.role === "admin");
+  }
 
   async function loadWeekSchedule() {
-    const { data } = await supabase
-      .from("schedules")
-      .select("*")
-      .eq("week_monday", monday);
+    const { data } = await supabase.from("schedules").select("*").eq("week_monday", monday);
     setSchedules(data || []);
   }
 
   async function loadAllWeeks() {
-    const { data } = await supabase
-      .from("schedules")
-      .select("week_monday")
-      .order("week_monday", { ascending: false });
+    const { data } = await supabase.from("schedules").select("week_monday").order("week_monday", { ascending: false });
     const unique = [...new Set((data || []).map(r => r.week_monday))];
     setAllWeeks(unique);
   }
 
-  async function saveShift(dayIndex, shift) {
-    setSaving(true);
+  async function saveShift(staffId, dayIndex, shift) {
     if (shift === null) {
       await supabase.from("schedules").delete()
-        .eq("week_monday", monday)
-        .eq("user_id", modal.userId)
-        .eq("day_index", dayIndex);
+        .eq("week_monday", monday).eq("staff_id", staffId).eq("day_index", dayIndex);
     } else {
       await supabase.from("schedules").upsert({
-        week_monday: monday,
-        user_id: modal.userId,
-        day_index: dayIndex,
-        shift_start: shift.start,
-        shift_end: shift.end,
-        note: shift.note,
-      }, { onConflict: "week_monday,user_id,day_index" });
+        week_monday: monday, staff_id: staffId, day_index: dayIndex,
+        shift_start: shift.start, shift_end: shift.end, note: shift.note,
+      }, { onConflict: "week_monday,staff_id,day_index" });
     }
     await loadWeekSchedule();
     await loadAllWeeks();
-    setSaving(false);
     setModal(null);
   }
 
-  function getShift(userId, dayIndex) {
-    return schedules.find(s => s.user_id === userId && s.day_index === dayIndex);
+  async function addStaff({ name, role }) {
+    await supabase.from("staff").insert({ name, role });
+    await loadStaff();
   }
 
-  function getWeekHours(userId) {
-    return schedules
-      .filter(s => s.user_id === userId)
+  async function removeStaff(id) {
+    if (!window.confirm("Remove this staff member?")) return;
+    await supabase.from("staff").delete().eq("id", id);
+    await loadStaff();
+  }
+
+  function getShift(staffId, dayIndex) {
+    return schedules.find(s => s.staff_id === staffId && s.day_index === dayIndex);
+  }
+
+  function getWeekHours(staffId) {
+    return schedules.filter(s => s.staff_id === staffId)
       .reduce((sum, s) => sum + parseHours(s.shift_start, s.shift_end), 0);
   }
 
   function shiftWeek(dir) {
     const d = new Date(monday); d.setDate(d.getDate() + dir * 7);
     setMonday(d.toISOString().split("T")[0]);
-  }
-
-  async function handleLogout() {
-    await supabase.auth.signOut();
-    setUser(null);
   }
 
   if (loading) {
@@ -389,17 +404,15 @@ export default function App() {
     );
   }
 
-  if (!user) {
-    return <LoginScreen onLogin={setUser} mode={mode} setMode={setMode} />;
-  }
+  if (!user) return <LoginScreen onLogin={setUser} mode={mode} setMode={setMode} />;
 
   const userName = user.user_metadata?.name || user.email?.split("@")[0] || "User";
+  const modalStaff = modal ? staff.find(s => s.id === modal.staffId) : null;
 
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
 
-      {/* AppBar */}
       <AppBar position="sticky" color="default">
         <Toolbar sx={{ gap: 1 }}>
           <Box sx={{ flexGrow: 1 }}>
@@ -408,28 +421,25 @@ export default function App() {
             </Typography>
             <Typography variant="h6" sx={{ lineHeight: 1.2, fontWeight: 700 }}>Schedule</Typography>
           </Box>
-
           <Tooltip title={mode === "dark" ? "Light mode" : "Dark mode"}>
             <IconButton onClick={() => setMode(m => m === "dark" ? "light" : "dark")} size="small">
               {mode === "dark" ? <LightMode fontSize="small" /> : <DarkMode fontSize="small" />}
             </IconButton>
           </Tooltip>
-
           <Chip
             avatar={<Avatar sx={{ bgcolor: "#F5A62330 !important", color: "#F5A623 !important", fontSize: "11px !important", fontWeight: 700 }}>{initials(userName)}</Avatar>}
             label={userName}
             variant="outlined" size="small"
             sx={{ borderColor: "#F5A62360", color: "#F5A623" }}
           />
-
           <Tooltip title="Sign out">
-            <IconButton size="small" onClick={handleLogout}><Logout fontSize="small" /></IconButton>
+            <IconButton size="small" onClick={() => supabase.auth.signOut()}><Logout fontSize="small" /></IconButton>
           </Tooltip>
         </Toolbar>
-
         <Tabs value={tab} onChange={(_, v) => setTab(v)} sx={{ px: 2, minHeight: 40 }}>
           <Tab icon={<CalendarMonth sx={{ fontSize: 16 }} />} iconPosition="start" label="Schedule" sx={{ minHeight: 40, py: 0 }} />
           <Tab icon={<History sx={{ fontSize: 16 }} />} iconPosition="start" label="History" sx={{ minHeight: 40, py: 0 }} />
+          {isAdmin && <Tab icon={<People sx={{ fontSize: 16 }} />} iconPosition="start" label="Staff" sx={{ minHeight: 40, py: 0 }} />}
         </Tabs>
       </AppBar>
 
@@ -445,9 +455,7 @@ export default function App() {
               return (
                 <Card key={wk} variant="outlined" sx={{ borderColor: active ? "primary.main" : "divider", bgcolor: active ? "#F5A62310" : "background.paper" }}>
                   <CardActionArea onClick={() => { setMonday(wk); setTab(0); }} sx={{ p: 2, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                    <Box>
-                      <Typography variant="body1" fontWeight={600}>{fmtDate(dates[0])} – {fmtDate(dates[6])}</Typography>
-                    </Box>
+                    <Typography variant="body1" fontWeight={600}>{fmtDate(dates[0])} – {fmtDate(dates[6])}</Typography>
                     <ChevronRight color="primary" />
                   </CardActionArea>
                 </Card>
@@ -457,22 +465,49 @@ export default function App() {
         </Box>
       )}
 
+      {/* STAFF MANAGEMENT */}
+      {tab === 2 && isAdmin && (
+        <Box sx={{ p: 3, maxWidth: 600, mx: "auto" }}>
+          <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
+            <Typography variant="overline" color="text.secondary" sx={{ letterSpacing: "0.15em" }}>Staff Members</Typography>
+            <Button variant="contained" size="small" startIcon={<PersonAdd />} onClick={() => setAddStaffOpen(true)}>
+              Add Staff
+            </Button>
+          </Stack>
+          <Stack spacing={1}>
+            {staff.map(s => (
+              <Paper key={s.id} variant="outlined" sx={{ p: 1.5, display: "flex", alignItems: "center", gap: 1.5 }}>
+                <Avatar sx={{ width: 36, height: 36, fontSize: 13, fontWeight: 700, bgcolor: (ROLE_META[s.role]?.color || "#F5A623") + "25", color: ROLE_META[s.role]?.color || "#F5A623" }}>
+                  {initials(s.name)}
+                </Avatar>
+                <Box sx={{ flexGrow: 1 }}>
+                  <Typography variant="body2" fontWeight={600}>{s.name}</Typography>
+                  <Typography variant="caption" color="text.secondary">{ROLE_META[s.role]?.label || s.role}</Typography>
+                </Box>
+                <Chip label={ROLE_META[s.role]?.label || s.role} size="small"
+                  sx={{ bgcolor: (ROLE_META[s.role]?.color || "#F5A623") + "20", color: ROLE_META[s.role]?.color || "#F5A623", border: `1px solid ${ROLE_META[s.role]?.color || "#F5A623"}40` }} />
+                {s.role !== "admin" && (
+                  <IconButton size="small" color="error" onClick={() => removeStaff(s.id)}>
+                    <Delete fontSize="small" />
+                  </IconButton>
+                )}
+              </Paper>
+            ))}
+          </Stack>
+        </Box>
+      )}
+
       {/* SCHEDULE */}
       {tab === 0 && (
         <>
           <Box sx={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 2, py: 1.5, px: 2 }}>
-            <IconButton onClick={() => shiftWeek(-1)} size="small" sx={{ border: "1px solid", borderColor: "divider" }}>
-              <ChevronLeft />
-            </IconButton>
+            <IconButton onClick={() => shiftWeek(-1)} size="small" sx={{ border: "1px solid", borderColor: "divider" }}><ChevronLeft /></IconButton>
             <Typography variant="body2" fontWeight={600} sx={{ minWidth: 160, textAlign: "center" }}>
               {fmtDate(weekDates[0])} – {fmtDate(weekDates[6])}
             </Typography>
-            <IconButton onClick={() => shiftWeek(1)} size="small" sx={{ border: "1px solid", borderColor: "divider" }}>
-              <ChevronRight />
-            </IconButton>
+            <IconButton onClick={() => shiftWeek(1)} size="small" sx={{ border: "1px solid", borderColor: "divider" }}><ChevronRight /></IconButton>
           </Box>
 
-          {/* My own schedule row */}
           <Box sx={{ overflowX: "auto", px: 2, pb: 6 }}>
             <TableContainer component={Paper} variant="outlined" sx={{ borderRadius: 2 }}>
               <Table size="small" stickyHeader>
@@ -489,44 +524,51 @@ export default function App() {
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  <TableRow hover>
-                    <TableCell sx={{ position: "sticky", left: 0, bgcolor: "background.paper", zIndex: 2 }}>
-                      <Stack direction="row" alignItems="center" spacing={1}>
-                        <Avatar sx={{ width: 28, height: 28, fontSize: 11, fontWeight: 700, bgcolor: "#F5A62325", color: "#F5A623" }}>
-                          {initials(userName)}
-                        </Avatar>
-                        <Typography variant="body2" fontWeight={600}>{userName}</Typography>
-                      </Stack>
-                    </TableCell>
-                    {DAYS.map((_, di) => {
-                      const sh = getShift(user.id, di);
-                      return (
-                        <TableCell key={di} align="center"
-                          onClick={() => setModal({ userId: user.id, dayIndex: di, existing: sh || null })}
-                          sx={{ cursor: "pointer", "&:hover": { bgcolor: "action.hover" } }}>
-                          {sh ? (
-                            <Chip label={`${fmtTime(sh.shift_start)}–${fmtTime(sh.shift_end)}`} size="small"
-                              sx={{ bgcolor: "#F5A62320", color: "#F5A623", border: "1px solid #F5A62350", fontSize: 10, height: 22, fontWeight: 600 }} />
-                          ) : (
-                            <Box sx={{ width: 20, height: 20, border: "1.5px dashed", borderColor: "divider", borderRadius: 1, mx: "auto" }} />
-                          )}
+                  {staff.map(s => {
+                    const color = ROLE_META[s.role]?.color || "#F5A623";
+                    const hrs = getWeekHours(s.id);
+                    return (
+                      <TableRow key={s.id} hover sx={{ "&:last-child td": { border: 0 } }}>
+                        <TableCell sx={{ position: "sticky", left: 0, bgcolor: "background.paper", zIndex: 2 }}>
+                          <Stack direction="row" alignItems="center" spacing={1}>
+                            <Avatar sx={{ width: 28, height: 28, fontSize: 11, fontWeight: 700, bgcolor: color + "25", color }}>
+                              {initials(s.name)}
+                            </Avatar>
+                            <Typography variant="body2" fontWeight={600}>{s.name}</Typography>
+                          </Stack>
                         </TableCell>
-                      );
-                    })}
-                    <TableCell align="center">
-                      {getWeekHours(user.id) > 0
-                        ? <Typography variant="body2" fontWeight={700} color="secondary.main">{getWeekHours(user.id)}h</Typography>
-                        : <Typography variant="body2" color="text.disabled">—</Typography>
-                      }
-                    </TableCell>
-                  </TableRow>
+                        {DAYS.map((_, di) => {
+                          const sh = getShift(s.id, di);
+                          return (
+                            <TableCell key={di} align="center"
+                              onClick={() => isAdmin && setModal({ staffId: s.id, dayIndex: di, existing: sh || null })}
+                              sx={{ cursor: isAdmin ? "pointer" : "default", "&:hover": isAdmin ? { bgcolor: "action.hover" } : {} }}>
+                              {sh ? (
+                                <Chip label={`${fmtTime(sh.shift_start)}–${fmtTime(sh.shift_end)}`} size="small"
+                                  sx={{ bgcolor: color + "20", color, border: `1px solid ${color}50`, fontSize: 10, height: 22, fontWeight: 600 }} />
+                              ) : isAdmin ? (
+                                <Box sx={{ width: 20, height: 20, border: "1.5px dashed", borderColor: "divider", borderRadius: 1, mx: "auto" }} />
+                              ) : null}
+                            </TableCell>
+                          );
+                        })}
+                        <TableCell align="center">
+                          {hrs > 0
+                            ? <Typography variant="body2" fontWeight={700} color="secondary.main">{hrs}h</Typography>
+                            : <Typography variant="body2" color="text.disabled">—</Typography>
+                          }
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
                 </TableBody>
               </Table>
             </TableContainer>
-
-            <Typography variant="caption" color="text.disabled" sx={{ display: "block", textAlign: "center", mt: 2 }}>
-              Tap any cell to assign or edit your shift
-            </Typography>
+            {isAdmin && (
+              <Typography variant="caption" color="text.disabled" sx={{ display: "block", textAlign: "center", mt: 2 }}>
+                Tap any cell to assign or edit a shift
+              </Typography>
+            )}
           </Box>
         </>
       )}
@@ -534,13 +576,19 @@ export default function App() {
       {modal && (
         <ShiftModal
           open={!!modal}
-          userName={userName}
+          staffName={modalStaff?.name || ""}
           existing={modal.existing}
-          onSave={(shift) => saveShift(modal.dayIndex, shift)}
+          onSave={(shift) => saveShift(modal.staffId, modal.dayIndex, shift)}
           onClose={() => setModal(null)}
           mode={mode}
         />
       )}
+
+      <AddStaffModal
+        open={addStaffOpen}
+        onClose={() => setAddStaffOpen(false)}
+        onAdd={addStaff}
+      />
     </ThemeProvider>
   );
 }
