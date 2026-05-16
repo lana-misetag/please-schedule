@@ -26,11 +26,12 @@ const SHIFT_PRESETS = [
 ];
 
 const ROLE_META = {
-  admin:     { label: "Manager",   color: "#F5A623" },
-  bartender: { label: "Bartender", color: "#4ECDC4" },
-  cook:      { label: "Cook",      color: "#FF6B6B" },
-  chef:      { label: "Chef",      color: "#FF9F43" },
-  staff:     { label: "Staff",     color: "#C3A6FF" },
+  admin:      { label: "Manager",   color: "#F5A623" },
+  cook_admin: { label: "Cook",      color: "#F5A623" },
+  bartender:  { label: "Bartender", color: "#4ECDC4" },
+  cook:       { label: "Cook",      color: "#FF6B6B" },
+  chef:       { label: "Chef",      color: "#FF9F43" },
+  staff:      { label: "Staff",     color: "#C3A6FF" },
 };
 
 // ─── UTILS ───────────────────────────────────────────────────────────────────
@@ -336,13 +337,13 @@ export default function App() {
 
   async function loadStaff() {
     const { data } = await supabase.from("staff").select("*");
-const ROLE_ORDER = { admin: 0, chef: 1, bartender: 2, cook: 3, staff: 4 };
+const ROLE_ORDER = { admin: 0, cook_admin: 0, chef: 1, bartender: 2, cook: 3, staff: 4};
 const sorted = (data || []).sort((a, b) => (ROLE_ORDER[a.role] ?? 5) - (ROLE_ORDER[b.role] ?? 5));
 setStaff(sorted);
     // Check if current user is admin
     const userName = user?.user_metadata?.name || user?.email?.split("@")[0] || "";
     const me = (data || []).find(s => s.name.toLowerCase() === userName.toLowerCase());
-    setIsAdmin(me?.role === "admin");
+    setIsAdmin(me?.role === "admin" || me?.role === "cook_admin");
   }
 
   async function loadWeekSchedule() {
@@ -467,15 +468,15 @@ setStaff(sorted);
 
       {/* STAFF MANAGEMENT */}
       {tab === 2 && isAdmin && (
-        <Box sx={{ p: 3, maxWidth: 600, mx: "auto" }}>
+        <Box sx={{ p: 3, maxWidth: 900, mx: "auto" }}>
           <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
             <Typography variant="overline" color="text.secondary" sx={{ letterSpacing: "0.15em" }}>Staff Members</Typography>
             <Button variant="contained" size="small" startIcon={<PersonAdd />} onClick={() => setAddStaffOpen(true)}>
               Add Staff
             </Button>
           </Stack>
-          <Stack spacing={1}>
-            {staff.map(s => (
+          <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", sm: "repeat(2, 1fr)", md: "repeat(3, 1fr)" }, gap: 1.5 }}>
+           {staff.map(s => (
               <Paper key={s.id} variant="outlined" sx={{ p: 1.5, display: "flex", alignItems: "center", gap: 1.5 }}>
                 <Avatar sx={{ width: 36, height: 36, fontSize: 13, fontWeight: 700, bgcolor: (ROLE_META[s.role]?.color || "#F5A623") + "25", color: ROLE_META[s.role]?.color || "#F5A623" }}>
                   {initials(s.name)}
@@ -493,7 +494,7 @@ setStaff(sorted);
                 )}
               </Paper>
             ))}
-          </Stack>
+          </Box>
         </Box>
       )}
 
